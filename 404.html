@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>CampusAble</title>
+    <script>
+      // Single Page Application redirect for GitHub Pages
+      (function () {
+        var base = '/campusable/';
+        var path = window.location.pathname;
+        if (path.startsWith(base)) {
+          path = path.slice(base.length);
+        } else if (path.startsWith('/')) {
+          path = path.slice(1);
+        }
+        var search = window.location.search || '';
+        var hash = window.location.hash || '';
+        window.location.replace(base + '#/' + path + search + hash);
+      })();
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to CampusAble...</p>
+  </body>
+</html>
