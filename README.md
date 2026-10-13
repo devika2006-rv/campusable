@@ -7,6 +7,7 @@
 [![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-3.4.11-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Vitest](https://img.shields.io/badge/Vitest-2.1.9-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-brightgreen?logo=github)](https://devika2006-rv.github.io/campusable/)
 
 > **Tagline:** *Your Campus. Your Route. Your Independence.*  
 > **Initial Reference Campus:** Vidya Academy of Science and Technology (VAST), Thalakkottukara, Thrissur, Kerala, India (PIN: 680501)
@@ -195,7 +196,17 @@ npm run build
 npm run preview
 ```
 
-The optimized static files will be placed into the `dist/` directory, ready to be hosted on any static hosting provider (Vercel, Netlify, Cloudflare Pages, GitHub Pages).
+The optimized static files will be placed into the `dist/` directory, ready to be hosted on any static hosting provider.
+
+### 6. GitHub Pages Deployment
+
+To deploy to GitHub Pages:
+
+```bash
+npm run deploy
+```
+
+This runs `npm run build` and automatically pushes the distribution output to the `gh-pages` branch on GitHub. Ensure that in repository **Settings** -> **Pages**, the source is set to **Deploy from a branch** (`gh-pages` / `/root`).
 
 ---
 
