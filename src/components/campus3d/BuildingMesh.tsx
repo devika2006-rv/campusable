@@ -6,10 +6,16 @@ import { Building } from '../../types/campus';
 interface Props {
   building: Building;
   isSelected: boolean;
+  showAllLabels?: boolean;
   onSelect: (b: Building) => void;
 }
 
-export const BuildingMesh: React.FC<Props> = ({ building, isSelected, onSelect }) => {
+export const BuildingMesh: React.FC<Props> = ({
+  building,
+  isSelected,
+  showAllLabels = false,
+  onSelect,
+}) => {
   const [hovered, setHovered] = useState(false);
   const meshRef = useRef<THREE.Mesh>(null);
 
@@ -20,14 +26,34 @@ export const BuildingMesh: React.FC<Props> = ({ building, isSelected, onSelect }
   const baseColor = building.color || '#6d28d9';
   const displayColor = isSelected ? '#0d9488' : hovered ? '#9333ea' : baseColor;
 
+  const shouldShowFullLabel = isSelected || hovered || showAllLabels;
+
   return (
     <group position={[x, y, z]}>
       {/* Selection indicator halo */}
       {isSelected && (
-        <mesh position={[0, -y + 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[Math.max(width, depth) * 0.65, Math.max(width, depth) * 0.8, 32]} />
-          <meshBasicMaterial color="#0d9488" side={THREE.DoubleSide} transparent opacity={0.6} />
-        </mesh>
+        <>
+          <mesh position={[0, -y + 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry
+              args={[
+                Math.max(width, depth) * 0.65,
+                Math.max(width, depth) * 0.85,
+                32,
+              ]}
+            />
+            <meshBasicMaterial
+              color="#0d9488"
+              side={THREE.DoubleSide}
+              transparent
+              opacity={0.8}
+            />
+          </mesh>
+          {/* Subtle vertical selection beacon pillar */}
+          <mesh position={[0, height / 2 + 1, 0]}>
+            <cylinderGeometry args={[0.08, 0.08, height + 2, 8]} />
+            <meshBasicMaterial color="#14b8a6" transparent opacity={0.5} />
+          </mesh>
+        </>
       )}
 
       {/* Main Building Body */}
@@ -54,6 +80,8 @@ export const BuildingMesh: React.FC<Props> = ({ building, isSelected, onSelect }
           color={displayColor}
           roughness={0.3}
           metalness={0.1}
+          emissive={isSelected ? '#0f766e' : hovered ? '#581c87' : '#000000'}
+          emissiveIntensity={isSelected ? 0.3 : hovered ? 0.2 : 0}
         />
       </mesh>
 
@@ -68,16 +96,20 @@ export const BuildingMesh: React.FC<Props> = ({ building, isSelected, onSelect }
           {/* Glass Windows simulation band */}
           <mesh position={[0, 0, depth / 2 + 0.05]}>
             <boxGeometry args={[width * 0.8, height * 0.5, 0.1]} />
-            <meshStandardMaterial color="#93c5fd" roughness={0.1} metalness={0.8} />
+            <meshStandardMaterial
+              color="#93c5fd"
+              roughness={0.1}
+              metalness={0.8}
+            />
           </mesh>
         </>
       )}
 
-      {/* 3D Billboard Label */}
+      {/* 3D Billboard Label: Clean & Uncluttered */}
       <Html
-        position={[0, height / 2 + 2, 0]}
+        position={[0, height / 2 + 1.8, 0]}
         center
-        distanceFactor={60}
+        distanceFactor={55}
         occlude={false}
       >
         <div
@@ -85,27 +117,41 @@ export const BuildingMesh: React.FC<Props> = ({ building, isSelected, onSelect }
             e.stopPropagation();
             onSelect(building);
           }}
-          className={`cursor-pointer px-2.5 py-1 rounded-lg text-xs font-bold shadow-md transition-all whitespace-nowrap select-none border ${
-            isSelected
-              ? 'bg-teal-600 text-white border-teal-400 scale-110 ring-2 ring-teal-300'
-              : hovered
-              ? 'bg-purple-800 text-white border-purple-500 scale-105'
-              : 'bg-white/95 text-slate-800 border-slate-300 hover:border-purple-400'
-          }`}
+          className="cursor-pointer select-none transition-transform"
         >
-          <div className="flex items-center gap-1.5">
-            {building.mapNumber && (
-              <span className="w-4 h-4 rounded-full bg-red-600 text-white font-bold flex items-center justify-center text-[9px] shadow-xs shrink-0">
-                {building.mapNumber}
-              </span>
-            )}
-            {building.code && !building.mapNumber && (
-              <span className="px-1 py-0.2 bg-slate-200/80 text-slate-700 rounded text-[10px] font-mono">
-                {building.code}
-              </span>
-            )}
-            <span>{building.name}</span>
-          </div>
+          {shouldShowFullLabel ? (
+            /* Full readable label badge */
+            <div
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-lg transition-all whitespace-nowrap flex items-center gap-1.5 border ${
+                isSelected
+                  ? 'bg-teal-700 text-white border-teal-300 scale-110 ring-4 ring-teal-200/60 shadow-teal-900/30'
+                  : hovered
+                  ? 'bg-purple-900 text-white border-purple-400 scale-105 shadow-purple-950/30'
+                  : 'bg-white/95 text-slate-800 border-slate-300 shadow-slate-400/30'
+              }`}
+            >
+              {building.mapNumber && (
+                <span className="w-4 h-4 rounded-full bg-red-600 text-white font-bold flex items-center justify-center text-[9px] shadow-xs shrink-0">
+                  {building.mapNumber}
+                </span>
+              )}
+              <span>{building.name}</span>
+            </div>
+          ) : (
+            /* Compact minimal badge when not selected/hovered to avoid visual congestion */
+            <div
+              className="w-5 h-5 rounded-full bg-white/90 border border-slate-300 shadow-sm flex items-center justify-center text-[10px] font-bold text-slate-700 hover:scale-125 transition-transform"
+              title={building.name}
+            >
+              {building.mapNumber ? (
+                <span className="text-red-600 font-extrabold">
+                  {building.mapNumber}
+                </span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-purple-700" />
+              )}
+            </div>
+          )}
         </div>
       </Html>
     </group>

@@ -1,120 +1,181 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getStoredCampusData } from '../utils/storage';
 import { calculateAccessibleRoute } from '../utils/dijkstra';
-import { CalculatedRoute, RoutePreferences } from '../types/campus';
-import { RoutePlannerForm } from '../features/navigation/RoutePlannerForm';
-import { RouteDirectionsView } from '../features/navigation/RouteDirectionsView';
+import { CalculatedRoute, RoutePreferences, RouteNode } from '../types/campus';
+import { getNavigableLocations, resolveToNodeId, getLocationDisplayName } from '../utils/locationHelper';
+import { RoutePlannerCard } from '../features/navigation/RoutePlannerCard';
+import { RouteSummaryPanel } from '../features/navigation/RouteSummaryPanel';
 import { CampusCanvas } from '../components/campus3d/CampusCanvas';
-import { Navigation, MapPin, Compass } from 'lucide-react';
+import { Navigation, Compass } from 'lucide-react';
 
 export const NavigatePage: React.FC = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const dataset = getStoredCampusData();
 
-  const [startNodeId, setStartNodeId] = useState<string>(
-    dataset.routeNodes[0]?.id || 'node-main-gate'
-  );
-  const [endNodeId, setEndNodeId] = useState<string>(
-    dataset.routeNodes[4]?.id || 'node-admin-front'
+  // Unified list of 26 campus landmarks and gate points
+  const navigableLocations = useMemo(
+    () => getNavigableLocations(dataset.buildings, dataset.routeNodes),
+    [dataset.buildings, dataset.routeNodes]
   );
 
-  const [preferences, setPreferences] = useState<RoutePreferences>({
-    avoidStairs: true,
-    preferStepFree: true,
-    preferRamps: true,
-    preferLifts: true,
-    avoidUnverified: false,
-    minimizeDistance: false,
-  });
+  // Defaults: Main Gate -> Main Engineering Block
+  const defaultStart = navigableLocations[0]?.id || 'node-main-gate-road';
+  const defaultEnd =
+    navigableLocations.find((l) => l.isBuilding && l.mapNumber === 1)?.id ||
+    navigableLocations[1]?.id ||
+    'bldg-1-main-engineering';
 
+  const [startLocationId, setStartLocationId] = useState<string>(defaultStart);
+  const [endLocationId, setEndLocationId] = useState<string>(defaultEnd);
+  const [avoidStairs, setAvoidStairs] = useState<boolean>(true);
   const [calculatedRoute, setCalculatedRoute] = useState<CalculatedRoute | null>(null);
 
-  // If navigated with "?to=b-library" or similar query params
+  // Support deep-linking via ?to=... and ?from=...
   useEffect(() => {
     const toParam = searchParams.get('to');
+    const fromParam = searchParams.get('from');
+
     if (toParam) {
-      // Find a node corresponding to this building or building entrance
-      const targetNode = dataset.routeNodes.find(
-        (n) => n.buildingId === toParam || n.id.includes(toParam)
+      const match = navigableLocations.find(
+        (l) => l.id === toParam || l.buildingId === toParam || l.nodeId === toParam
       );
-      if (targetNode) {
-        setEndNodeId(targetNode.id);
+      if (match) {
+        setEndLocationId(match.id);
       }
     }
-  }, [searchParams, dataset.routeNodes]);
 
-  const handleCalculate = () => {
+    if (fromParam) {
+      const match = navigableLocations.find(
+        (l) => l.id === fromParam || l.buildingId === fromParam || l.nodeId === fromParam
+      );
+      if (match) {
+        setStartLocationId(match.id);
+      }
+    }
+  }, [searchParams, navigableLocations]);
+
+  // Execute Dijkstra route calculation
+  const handleCalculateRoute = () => {
+    const startNodeId = resolveToNodeId(startLocationId, navigableLocations);
+    const endNodeId = resolveToNodeId(endLocationId, navigableLocations);
+
+    const prefs: RoutePreferences = {
+      avoidStairs,
+      preferStepFree: avoidStairs,
+      preferRamps: true,
+      preferLifts: true,
+      avoidUnverified: false,
+      minimizeDistance: false,
+    };
+
     const result = calculateAccessibleRoute(
       startNodeId,
       endNodeId,
       dataset.routeNodes,
       dataset.routeEdges,
-      preferences
+      prefs
     );
+
     setCalculatedRoute(result);
   };
 
-  // Run initial calculation once mounted so users immediately see a working demo route
+  // Run initial calculation once mounted so users immediately see a clear default route
   useEffect(() => {
-    handleCalculate();
-  }, [startNodeId, endNodeId, preferences]);
+    handleCalculateRoute();
+  }, [startLocationId, endLocationId, avoidStairs]);
 
-  const activePathEdgeIds = calculatedRoute?.found ? calculatedRoute.edges.map((e) => e.id) : [];
+  const handleClearRoute = () => {
+    setCalculatedRoute(null);
+  };
+
+  const activePathEdgeIds = calculatedRoute?.found
+    ? calculatedRoute.edges.map((e) => e.id)
+    : [];
+
+  // Identify Start and Destination Route Nodes for 3D/2D Marker rendering
+  const startNodeId = resolveToNodeId(startLocationId, navigableLocations);
+  const endNodeId = resolveToNodeId(endLocationId, navigableLocations);
+  const startNode = dataset.routeNodes.find((n) => n.id === startNodeId) || null;
+  const endNode = dataset.routeNodes.find((n) => n.id === endNodeId) || null;
+
+  const startDisplayName = getLocationDisplayName(startLocationId, navigableLocations);
+  const endDisplayName = getLocationDisplayName(endLocationId, navigableLocations);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Page Title */}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+      {/* Page Title & Clean Subtitle */}
       <div>
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-          <Navigation className="w-8 h-8 text-teal-600" />
-          <span>Campus Step-Free Route Planner</span>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
+          <Navigation className="w-7 h-7 text-teal-600" />
+          <span>Plan Campus Route</span>
         </h1>
-        <p className="text-sm text-slate-600 mt-1 max-w-2xl">
-          Powered by graph algorithms with strict stair avoidance. Never compromises on physical accessibility honesty.
+        <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
+          Get clear, step-free directions between campus buildings, amenities, and entrance gates.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left column: Planner Form & Directions */}
-        <div className="lg:col-span-5 space-y-6">
-          <RoutePlannerForm
-            nodes={dataset.routeNodes}
-            selectedStartId={startNodeId}
-            selectedEndId={endNodeId}
-            preferences={preferences}
-            onStartChange={setStartNodeId}
-            onEndChange={setEndNodeId}
-            onPreferencesChange={setPreferences}
-            onCalculate={handleCalculate}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+        {/* Left column: Planner Form & Route Summary Panel */}
+        <div className="lg:col-span-5 space-y-5">
+          <RoutePlannerCard
+            locations={navigableLocations}
+            selectedStartId={startLocationId}
+            selectedEndId={endLocationId}
+            avoidStairs={avoidStairs}
+            onStartChange={setStartLocationId}
+            onEndChange={setEndLocationId}
+            onAvoidStairsChange={setAvoidStairs}
+            onCalculate={handleCalculateRoute}
+            onClearRoute={handleClearRoute}
+            isRouteActive={activePathEdgeIds.length > 0}
           />
 
-          <RouteDirectionsView route={calculatedRoute} />
+          <RouteSummaryPanel
+            route={calculatedRoute}
+            locations={navigableLocations}
+            startLocationId={startLocationId}
+            endLocationId={endLocationId}
+            isAccessiblePreference={avoidStairs}
+          />
         </div>
 
-        {/* Right column: Interactive 3D / 2D Route Visualizer */}
-        <div className="lg:col-span-7 sticky top-24">
+        {/* Right column: Main Route Visualizer Map */}
+        <div className="lg:col-span-7 sticky top-20">
           <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+            {/* Visualizer Status Header */}
             <div className="px-5 py-3 bg-slate-900 text-white flex items-center justify-between text-xs font-semibold">
               <div className="flex items-center gap-2">
                 <Compass className="w-4 h-4 text-teal-300" />
-                <span>Active Route Visualizer</span>
+                <span>Campus Route Visualizer</span>
               </div>
               <span className="text-slate-400 font-mono text-[11px]">
                 {activePathEdgeIds.length > 0
                   ? `${activePathEdgeIds.length} segments highlighted`
-                  : 'Awaiting route'}
+                  : 'Ready for route'}
               </span>
             </div>
 
-            <div className="h-[520px] w-full">
+            {/* Visualizer Canvas Area */}
+            <div className="h-[540px] sm:h-[600px] w-full relative">
               <CampusCanvas
                 buildings={dataset.buildings}
                 routeNodes={dataset.routeNodes}
                 routeEdges={dataset.routeEdges}
                 selectedBuilding={null}
-                onSelectBuilding={() => {}}
+                onSelectBuilding={(b) => {
+                  if (b) {
+                    setEndLocationId(b.id);
+                  }
+                }}
                 activePathEdgeIds={activePathEdgeIds}
+                startNode={startNode}
+                endNode={endNode}
+                startLabel={startDisplayName}
+                endLabel={endDisplayName}
+                onClearRoute={handleClearRoute}
+                onSetStartBuilding={(b) => setStartLocationId(b.id)}
+                onSetDestinationBuilding={(b) => setEndLocationId(b.id)}
               />
             </div>
           </div>

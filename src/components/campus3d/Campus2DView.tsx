@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Building, RouteEdge, RouteNode } from '../../types/campus';
-import { Layers, ZoomIn, ZoomOut, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Layers, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
 interface Props {
   buildings: Building[];
@@ -9,6 +9,8 @@ interface Props {
   selectedBuilding: Building | null;
   onSelectBuilding: (b: Building) => void;
   activePathEdgeIds?: string[];
+  startNode?: RouteNode | null;
+  endNode?: RouteNode | null;
 }
 
 export const Campus2DView: React.FC<Props> = ({
@@ -18,29 +20,79 @@ export const Campus2DView: React.FC<Props> = ({
   selectedBuilding,
   onSelectBuilding,
   activePathEdgeIds = [],
+  startNode = null,
+  endNode = null,
 }) => {
-  // Coordinate transform: map 3D units to SVG viewBox 0 0 800 800
+  const [scale, setScale] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+
+  // Coordinate transform: map 3D units to SVG coordinate space
   // Campus range: X [-30..+30], Z [-50..+35]
   const toSvgX = (x: number) => 400 + x * 9.5;
   const toSvgY = (z: number) => 430 + z * 7.2;
 
+  const handleZoomIn = () => setScale((s) => Math.min(2.2, s + 0.2));
+  const handleZoomOut = () => setScale((s) => Math.max(0.6, s - 0.2));
+  const handleReset = () => {
+    setScale(1);
+    setPan({ x: 0, y: 0 });
+  };
+
   return (
-    <div className="relative w-full h-full bg-slate-100 flex flex-col items-center justify-center overflow-hidden border border-slate-200 rounded-2xl">
+    <div className="relative w-full h-full bg-slate-50 flex flex-col items-center justify-center overflow-hidden border border-slate-200 rounded-2xl select-none">
       {/* 2D Schematic Header Badge */}
       <div className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2 text-xs font-semibold text-slate-700">
         <Layers className="w-4 h-4 text-teal-600" />
-        <span>2D Schematic Blueprint (Scale 1u ≈ 4m)</span>
+        <span>2D Schematic View</span>
+      </div>
+
+      {/* 2D Zoom Controls Toolbar */}
+      <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5 bg-white/95 backdrop-blur-md p-1 rounded-xl border border-slate-200 shadow-sm">
+        <button
+          type="button"
+          onClick={handleZoomIn}
+          title="Zoom In"
+          className="p-1.5 text-slate-700 hover:text-purple-800 hover:bg-slate-100 rounded-lg transition-colors"
+          aria-label="Zoom In"
+        >
+          <ZoomIn className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={handleZoomOut}
+          title="Zoom Out"
+          className="p-1.5 text-slate-700 hover:text-purple-800 hover:bg-slate-100 rounded-lg transition-colors"
+          aria-label="Zoom Out"
+        >
+          <ZoomOut className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={handleReset}
+          title="Reset View"
+          className="p-1.5 text-slate-700 hover:text-purple-800 hover:bg-slate-100 rounded-lg transition-colors"
+          aria-label="Reset View"
+        >
+          <RotateCcw className="w-4 h-4" />
+        </button>
       </div>
 
       <svg
         viewBox="0 0 800 800"
-        className="w-full h-full max-h-[750px] select-none"
-        style={{ background: '#f8fafc' }}
+        className="w-full h-full max-h-[750px] transition-transform duration-200"
+        style={{
+          transform: `scale(${scale}) translate(${pan.x}px, ${pan.y}px)`,
+          background: '#f8fafc',
+        }}
       >
         <defs>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
             <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" strokeWidth="1" />
           </pattern>
+          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3" result="glow" />
+            <feComposite in="SourceGraphic" in2="glow" operator="over" />
+          </filter>
         </defs>
 
         {/* Background Grid */}
@@ -81,12 +133,25 @@ export const Campus2DView: React.FC<Props> = ({
 
             if (isRouteActive) {
               strokeColor = '#7c3aed'; // vibrant purple when part of active navigated route
-              strokeWidth = 6;
+              strokeWidth = 7;
               strokeDasharray = undefined;
             }
 
             return (
               <g key={edge.id} className="cursor-pointer group">
+                {/* Glowing underlay for active route */}
+                {isRouteActive && (
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="#c084fc"
+                    strokeWidth="14"
+                    strokeLinecap="round"
+                    opacity="0.6"
+                  />
+                )}
                 <line
                   x1={x1}
                   y1={y1}
@@ -115,7 +180,7 @@ export const Campus2DView: React.FC<Props> = ({
                 key={node.id}
                 cx={cx}
                 cy={cy}
-                r={isStair || isRamp ? 5 : 4}
+                r={isStair || isRamp ? 4.5 : 3.5}
                 fill={isStair ? '#f43f5e' : isRamp ? '#0d9488' : '#64748b'}
                 stroke="#ffffff"
                 strokeWidth="1.5"
@@ -161,7 +226,14 @@ export const Campus2DView: React.FC<Props> = ({
                 {/* Map Number Circle Indicator */}
                 {bldg.mapNumber && (
                   <g>
-                    <circle cx={x + 10} cy={y + 10} r="7" fill="#dc2626" stroke="#ffffff" strokeWidth="1.5" />
+                    <circle
+                      cx={x + 10}
+                      cy={y + 10}
+                      r="7"
+                      fill="#dc2626"
+                      stroke="#ffffff"
+                      strokeWidth="1.5"
+                    />
                     <text
                       x={x + 10}
                       y={y + 13}
@@ -203,6 +275,26 @@ export const Campus2DView: React.FC<Props> = ({
             );
           })}
         </g>
+
+        {/* Start (A) Marker Overlay */}
+        {startNode && (
+          <g transform={`translate(${toSvgX(startNode.coordinates.x)}, ${toSvgY(startNode.coordinates.z)})`}>
+            <circle cx="0" cy="0" r="14" fill="#059669" stroke="#ffffff" strokeWidth="2.5" className="filter drop-shadow-md" />
+            <text x="0" y="4.5" textAnchor="middle" fill="#ffffff" fontSize="12" fontWeight="900" className="pointer-events-none select-none">
+              A
+            </text>
+          </g>
+        )}
+
+        {/* Destination (B) Marker Overlay */}
+        {endNode && (
+          <g transform={`translate(${toSvgX(endNode.coordinates.x)}, ${toSvgY(endNode.coordinates.z)})`}>
+            <circle cx="0" cy="0" r="14" fill="#6b21a8" stroke="#ffffff" strokeWidth="2.5" className="filter drop-shadow-md" />
+            <text x="0" y="4.5" textAnchor="middle" fill="#ffffff" fontSize="12" fontWeight="900" className="pointer-events-none select-none">
+              B
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   );
